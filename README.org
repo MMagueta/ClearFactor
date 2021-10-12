@@ -1,0 +1,6 @@
+* About
+
+This is yet another project I felt motivated to start but will very likely be lazy at some point.
+The goal is to implement a Forth-like lang in F# with Hindley-Milner inference.
+
+As the name implies, Forth should be clear! Types should make the way forth clear!
