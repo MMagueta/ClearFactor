@@ -1,16 +1,14 @@
 open Forth.Parser
-
+open FParsec.CharParsers
 [<EntryPointAttribute>]
 let main _ =
+    
     """
-         [ @list @acc ] @sum let
-         list @elem loop
-         @list + @acc = @acc
-         endLoop
-         @acc return
-         endLet
+    : @sum { @list @acc } @list @elem loop @list + @acc = @acc endLoop @acc return ;
     """
-    |> (fun x -> x.Split(" "))
     |> parse
-    |> printfn "%A"
+    |> function
+       | ParserResult.Success (x, y, z) -> printfn "%A" x
+       | ParserResult.Failure (x, y, z) -> printfn "%A" x
+    
     0
