@@ -1,82 +1,93 @@
-﻿namespace Forth
+﻿namespace ClearFactor
 
 module Parser =
     open FParsec
 
-    type ForthLangTypes =
-        | FString of string
-        | FInt of int
-        | FFloat of float32
-        | FAtom of string
-        | FBool of bool
-        | FList of ForthLangTypes list
-        | FParams of ForthLangTypes list
-        | FLabel of string
+    type ClearFactorLangTypes =
+        | CFString of string
+        | CFInt of int
+        | CFFloat of float32
+        | CFAtom of string * ClearFactorLangTypes list
+        | CFBool of bool
+        | CFList of ClearFactorLangTypes list
+        | CFParams of ClearFactorLangTypes list
+        | CFLabel of string
+        | CFScope of ClearFactorLangTypes list
 
-    type ForthParser<'T> = Parser<'T, unit>
+    type ClearFactorParser<'T> = Parser<'T, unit>
 
-    let parseExpression, parseExpressionRef: ForthParser<ForthLangTypes> * ForthParser<ForthLangTypes> ref =
+    let parseExpression, parseExpressionRef: ClearFactorParser<ClearFactorLangTypes> * ClearFactorParser<ClearFactorLangTypes> ref =
         createParserForwardedToRef ()
 
     let chr c = skipChar c
     let endBy p sep = many (p .>> sep)
-    let symbol: ForthParser<char> = anyOf "!=<>+*/^%&|?#@"
+    let symbol: ClearFactorParser<char> = anyOf "!=<>+*/^%&|?#"
 
-    let parseInt: ForthParser<ForthLangTypes> = spaces >>. pint32 .>> spaces |>> FInt
+    let parseInt: ClearFactorParser<ClearFactorLangTypes> = spaces >>. pint32 .>> spaces |>> CFInt
 
-    let parseString: ForthParser<ForthLangTypes> =
+    let parseString: ClearFactorParser<ClearFactorLangTypes> =
         parse {
             do! chr '"'
             let! xs = manyChars (noneOf "\"") .>> spaces
             do! chr '"'
-            return FString xs
+            return CFString xs
         }
         .>> spaces
 
-    let parseList: ForthParser<ForthLangTypes> =
+    let parseList: ClearFactorParser<ClearFactorLangTypes> =
         between (pchar '[' .>> spaces) (pchar ']' .>> spaces) (many parseExpression)
-        |>> FList
+        |>> CFList
         
-    let parseParams: ForthParser<ForthLangTypes> =
+    let parseScope: ClearFactorParser<ClearFactorLangTypes> =
+        between (pchar ':' .>> spaces) (pchar ';' .>> spaces) (many parseExpression)
+        |>> CFScope
+        
+    let parseParams: ClearFactorParser<ClearFactorLangTypes> =
         between (pchar '{' .>> spaces) (pchar '}' .>> spaces) (many parseExpression)
-        |>> FParams
+        |>> CFParams
 
-    let parseBool: ForthParser<ForthLangTypes> =
+    let parseBool: ClearFactorParser<ClearFactorLangTypes> =
         (stringReturn "#T" true)
         <|> (stringReturn "#F" false)
-        |>> FBool
+        |>> CFBool
 
-    let parseAtom: ForthParser<ForthLangTypes> =
-        (stringReturn "let" "let")
-        <|> (stringReturn "endLet" "endLet")
-        <|> (stringReturn "endLoop" "endLoop")
-        <|> (stringReturn "loop" "loop")
-        <|> (stringReturn "return" "return")
-        |>> FAtom
-
-    let parseLabel2: ForthParser<ForthLangTypes> =
+    let parseAtom: ClearFactorParser<ClearFactorLangTypes> =
         parse {
-            do! chr '@'
-            let! xs = manyChars (noneOf "\"") .>> spaces
-            return FLabel xs
+            let! atom = pstring "loop"
+            let! sequence = between (spaces1) (pstring "endLoop" .>> spaces) (many parseExpression)
+            return (CFAtom (atom, sequence))
+        }
+        <|>
+        parse {
+            let! atom = pstring "return"
+            let! sequence = between (spaces1) (pstring "endReturn" .>> spaces) (many parseExpression)
+            return (CFAtom (atom, sequence))
         }
 
-    let parseLabel: ForthParser<ForthLangTypes> =
+    let parseLabel: ClearFactorParser<ClearFactorLangTypes> =
         parse {
             let! label = chr '@' >>. (many1Chars (letter <|> digit <|> symbol)) .>> spaces
-            return (FLabel ("@" + label))
+            return (CFLabel ("@" + label))
+        }
+
+    let parseSymbols: ClearFactorParser<ClearFactorLangTypes> =
+        parse {
+            let! label = spaces >>. (many1Chars symbol) .>> spaces
+            return (CFLabel label)
         }
     
     let runParserRef () =
         do
             (parseExpressionRef
-             := choice [ parseInt
+             := choice [ parseLabel
+                         parseInt
                          parseString
                          parseBool
                          parseList
                          parseParams
+                         parseScope
                          parseAtom
-                         parseLabel ])
+                         parseSymbols ])
 
     let expressions (input: string) =
         run (many1 (spaces >>. parseExpression)) input
